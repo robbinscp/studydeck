@@ -129,20 +129,30 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .editor-search{flex:1;min-width:160px;padding:8px 13px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.86rem;}
 .editor-search:focus{outline:none;border-color:var(--accent);}
 .editor-filter{padding:8px 13px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Mono',monospace;font-size:.72rem;cursor:pointer;}
-.eq-list{display:flex;flex-direction:column;gap:7px;max-height:65vh;overflow-y:auto;scrollbar-width:thin;}
-.eq-row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 15px;}
-.eq-hdr{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px;}
-.eq-num{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--accent);flex-shrink:0;margin-top:2px;}
-.eq-src{font-family:'DM Mono',monospace;font-size:.63rem;color:var(--purple);flex-shrink:0;margin-top:2px;}
-.eq-q{font-size:.88rem;line-height:1.5;flex:1;}
-.eq-opts{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
-.eq-noans{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--danger);}
-.eq-opt-btn{padding:5px 12px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'DM Mono',monospace;font-size:.74rem;cursor:pointer;transition:all .15s;font-weight:500;}
-.eq-opt-btn:hover{border-color:var(--accent);color:var(--accent);}
-.eq-opt-btn.set{border-color:var(--accent2);background:rgba(92,232,176,.1);color:var(--accent2);}
-.eq-clr{background:none;border:none;color:var(--muted);font-size:.72rem;font-family:'DM Mono',monospace;cursor:pointer;padding:3px 7px;border-radius:5px;}
+.eq-list{display:flex;flex-direction:column;gap:10px;max-height:65vh;overflow-y:auto;scrollbar-width:thin;padding-right:2px;}
+.eq-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.eq-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.eq-num{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--accent);background:rgba(232,197,71,.1);padding:2px 8px;border-radius:99px;flex-shrink:0;}
+.eq-src{font-family:'DM Mono',monospace;font-size:.63rem;color:var(--purple);flex-shrink:0;}
+.eq-q{font-size:.97rem;line-height:1.65;color:var(--text);margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+.eq-opts{display:flex;flex-direction:column;gap:5px;}
+.eq-noans{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--danger);margin-bottom:4px;}
+.eq-opt-btn{padding:7px 13px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.87rem;cursor:pointer;transition:all .15s;text-align:left;display:flex;gap:8px;align-items:baseline;line-height:1.45;}
+.eq-opt-btn .eq-opt-letter{font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);font-weight:500;flex-shrink:0;min-width:16px;}
+.eq-opt-btn:hover{border-color:var(--accent);background:#1e1c14;}
+.eq-opt-btn:hover .eq-opt-letter{color:var(--accent);}
+.eq-opt-btn.set{border-color:var(--accent2);background:rgba(92,232,176,.08);color:var(--text);}
+.eq-opt-btn.set .eq-opt-letter{color:var(--accent2);}
+.eq-opt-btn.set::after{content:'✓';font-family:'DM Mono',monospace;font-size:.7rem;color:var(--accent2);margin-left:auto;padding-left:8px;flex-shrink:0;}
+.eq-opts-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:6px;}
+.eq-clr{background:none;border:none;color:var(--muted);font-size:.7rem;font-family:'DM Mono',monospace;cursor:pointer;padding:3px 7px;border-radius:5px;}
 .eq-clr:hover{color:var(--danger);}
 .eq-empty{text-align:center;padding:36px;color:var(--muted);font-family:'DM Mono',monospace;font-size:.78rem;}
+.ed-progress{position:sticky;top:0;z-index:10;background:var(--bg);padding:10px 0 12px;margin-bottom:6px;}
+.ed-progress-info{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:6px;}
+.ed-progress-info strong{color:var(--accent2);}
+.ed-progress-track{height:3px;background:var(--border);border-radius:99px;overflow:hidden;}
+.ed-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width .3s;}
 
 /* ═══════════════ QUIZ SCREEN ═══════════════ */
 #screen-quiz{display:none;}
@@ -269,6 +279,10 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 
   <!-- Answers tab -->
   <div id="tab-answers" class="etab-panel" style="display:none;">
+    <div class="ed-progress">
+      <div class="ed-progress-info"><span>Answer Progress</span><strong id="ed-prog-label">0 / 0</strong></div>
+      <div class="ed-progress-track"><div class="ed-progress-fill" id="ed-prog-fill" style="width:0%"></div></div>
+    </div>
     <div class="editor-toolbar">
       <input type="text" class="editor-search" id="ed-search" placeholder="Search questions…">
       <select class="editor-filter" id="ed-filter">
@@ -364,13 +378,13 @@ let selectedSrcs=new Set(); // source ids checked in current exam view
 let quizQ=[],quizCur=0,quizAns={},quizMissed=[];
 
 // ── Persist ──────────────────────────────
-async function loadBank(){
-  try{const r=await window.storage.get('studydeck-v2');if(r&&r.value)bank=JSON.parse(r.value);}catch(e){}
+function loadBank(){
+  try{const v=localStorage.getItem('studydeck-v2');if(v)bank=JSON.parse(v);}catch(e){console.warn('Storage read failed',e);}
   bank.exams=bank.exams||[];bank.questions=bank.questions||[];
   showExams();
 }
-async function saveBank(){
-  try{await window.storage.set('studydeck-v2',JSON.stringify(bank));}catch(e){console.warn('Storage unavailable',e);}
+function saveBank(){
+  try{localStorage.setItem('studydeck-v2',JSON.stringify(bank));}catch(e){console.warn('Storage unavailable',e);}
 }
 loadBank();
 
@@ -542,7 +556,7 @@ function switchExamTab(id){
   document.querySelectorAll('.etab').forEach(t=>t.classList.toggle('active',t.dataset.etab===id));
   document.querySelectorAll('.etab-panel').forEach(p=>p.style.display='none');
   document.getElementById(id).style.display='block';
-  if(id==='tab-answers')renderEditorList();
+  if(id==='tab-answers'){document.getElementById('ed-filter').value='nokey';renderEditorList();}
 }
 
 // ══════════════════════════════════════════
@@ -665,33 +679,63 @@ function renderEditorList(){
   const search=document.getElementById('ed-search').value.trim().toLowerCase();
   const filter=document.getElementById('ed-filter').value;
   const container=document.getElementById('eq-list');container.innerHTML='';
+  // Update sticky progress bar
+  const allQs=examQs();const keyedCount=allQs.filter(q=>q.answer).length;const total=allQs.length;
+  const pct=total?Math.round(keyedCount/total*100):0;
+  document.getElementById('ed-prog-label').textContent=`${keyedCount} / ${total} answered`;
+  document.getElementById('ed-prog-fill').style.width=pct+'%';
   let qs=examQs();
   if(filter==='nokey')qs=qs.filter(q=>!q.answer);
   if(filter==='keyed')qs=qs.filter(q=>!!q.answer);
   if(search)qs=qs.filter(q=>q.question.toLowerCase().includes(search)||(q.sourceName||'').toLowerCase().includes(search));
   if(!qs.length){const el=document.createElement('div');el.className='eq-empty';el.textContent=examQs().length?'No questions match the filter.':'No questions in this exam yet.';container.appendChild(el);return;}
-  qs.forEach(q=>{
-    const row=document.createElement('div');row.className='eq-row';
-    const hdr=document.createElement('div');hdr.className='eq-hdr';
+  qs.forEach((q,idx)=>{
+    const row=document.createElement('div');row.className='eq-row';row.dataset.qid=q.id;row.dataset.idx=idx;row.tabIndex=0;
+    const meta=document.createElement('div');meta.className='eq-meta';
     const num=document.createElement('span');num.className='eq-num';num.textContent=`#${q.num}`;
     const src=document.createElement('span');src.className='eq-src';src.textContent=(q.sourceName||'').replace(/\.pdf$/i,'');
-    const qt=document.createElement('span');qt.className='eq-q';qt.textContent=q.question;
-    hdr.appendChild(num);hdr.appendChild(src);hdr.appendChild(qt);
+    meta.appendChild(num);meta.appendChild(src);
+    const qt=document.createElement('div');qt.className='eq-q';qt.textContent=q.question;
     const optsDiv=document.createElement('div');optsDiv.className='eq-opts';
-    if(!q.answer){const na=document.createElement('span');na.className='eq-noans';na.textContent='No answer —';optsDiv.appendChild(na);}
+    if(!q.answer){const na=document.createElement('div');na.className='eq-noans';na.textContent='No answer set';optsDiv.appendChild(na);}
     q.options.forEach(opt=>{
       const btn=document.createElement('button');btn.className='eq-opt-btn'+(q.answer===opt.letter?' set':'');
-      btn.textContent=opt.letter+(opt.text?`. ${opt.text.slice(0,35)}${opt.text.length>35?'…':''}`:'');
-      btn.title=opt.text||opt.letter;
+      const letter=document.createElement('span');letter.className='eq-opt-letter';letter.textContent=opt.letter+'.';
+      const text=document.createTextNode(opt.text||opt.letter);
+      btn.appendChild(letter);btn.appendChild(text);
       btn.addEventListener('click',()=>{setAnswer(q.id,opt.letter);renderEditorList();});
       optsDiv.appendChild(btn);
     });
-    if(q.answer){const clr=document.createElement('button');clr.className='eq-clr';clr.textContent='✕ Clear';clr.addEventListener('click',()=>{setAnswer(q.id,null);renderEditorList();});optsDiv.appendChild(clr);}
-    row.appendChild(hdr);row.appendChild(optsDiv);container.appendChild(row);
+    const footer=document.createElement('div');footer.className='eq-opts-footer';
+    if(q.answer){const clr=document.createElement('button');clr.className='eq-clr';clr.textContent='✕ Clear answer';clr.addEventListener('click',()=>{setAnswer(q.id,null);renderEditorList();});footer.appendChild(clr);}
+    optsDiv.appendChild(footer);
+    row.appendChild(meta);row.appendChild(qt);row.appendChild(optsDiv);container.appendChild(row);
   });
 }
 document.getElementById('ed-search').addEventListener('input',renderEditorList);
 document.getElementById('ed-filter').addEventListener('change',renderEditorList);
+
+// Keyboard shortcuts in answer editor: hover/focus a question row, press A-E to set answer
+let _hoveredQRow=null;
+document.getElementById('eq-list').addEventListener('mouseover',e=>{
+  const row=e.target.closest('.eq-row');if(row)_hoveredQRow=row;
+});
+document.getElementById('eq-list').addEventListener('mouseleave',()=>{_hoveredQRow=null;});
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('tab-answers').style.display==='none')return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;
+  const letter=e.key.toUpperCase();if(!/^[A-E]$/.test(letter))return;
+  const row=_hoveredQRow||document.querySelector('.eq-row:focus');if(!row)return;
+  const qid=row.dataset.qid;const q=bank.questions.find(q=>q.id===qid);if(!q)return;
+  const valid=q.options.find(o=>o.letter===letter);if(!valid)return;
+  e.preventDefault();
+  setAnswer(qid,letter);renderEditorList();
+  // Auto-advance: focus next unanswered row in the list
+  const rows=[...document.querySelectorAll('#eq-list .eq-row')];
+  const cur=rows.findIndex(r=>r.dataset.qid===qid);
+  const next=rows.slice(cur+1).find(r=>{const nq=bank.questions.find(q=>q.id===r.dataset.qid);return nq&&!nq.answer;});
+  if(next){next.scrollIntoView({behavior:'smooth',block:'center'});next.focus();_hoveredQRow=next;}
+});
 
 // ══════════════════════════════════════════
 //  CSV EXPORT / IMPORT
@@ -830,6 +874,18 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('q-next').click();}
   if(e.key==='ArrowLeft'){e.preventDefault();document.getElementById('q-prev').click();}
   if(e.key==='f'||e.key==='F')document.getElementById('q-flip').click();
+  // A-E to pick answer or set inline answer key
+  const letter=e.key.toUpperCase();if(/^[A-E]$/.test(letter)){
+    const setter=document.getElementById('inline-setter');
+    if(setter.style.display!=='none'){
+      // Set answer key via inline setter
+      const btn=[...document.getElementById('is-opts').querySelectorAll('.is-btn')].find(b=>b.textContent.startsWith(letter+'.')||b.textContent.trim()===letter);
+      if(btn){e.preventDefault();btn.click();return;}
+    }
+    // Pick answer on front card (not yet answered)
+    const q=quizQ[quizCur];if(quizAns[quizCur])return;
+    const opt=q.options.find(o=>o.letter===letter);if(opt){e.preventDefault();pickAnswer(opt.letter,q);}
+  }
 });
 
 function showResults(){
