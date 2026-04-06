@@ -5,6 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StudyDeck</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- OpenTelemetry Browser Tracing
+     Loads async (module/deferred); all traced actions are user-driven so the
+     SDK will be ready well before any interaction fires. -->
+<script type="module">
+import { trace }                from 'https://esm.sh/@opentelemetry/api@1.9.0';
+import { WebTracerProvider,
+         BatchSpanProcessor }   from 'https://esm.sh/@opentelemetry/sdk-trace-web@1.26.0';
+import { OTLPTraceExporter }    from 'https://esm.sh/@opentelemetry/exporter-trace-otlp-http@0.53.0';
+import { Resource }             from 'https://esm.sh/@opentelemetry/resources@1.26.0';
+
+const exporter = new OTLPTraceExporter({
+  url: 'https://otel-collector.vmgringo.com/v1/traces',
+});
+
+const provider = new WebTracerProvider({
+  resource: new Resource({ 'service.name': 'studydeck' }),
+});
+provider.addSpanProcessor(new BatchSpanProcessor(exporter));
+provider.register();
+
+window._otelTracer = trace.getTracer('studydeck-browser', '1.0.0');
+</script>
+
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 :root{
@@ -493,6 +517,7 @@ function openCreateModal(){
   openModal('New Exam','Exam name (e.g. CDAE Exam A)','Create',(name)=>{
     const ex={id:uid(),name:name.trim(),created:new Date().toLocaleDateString(),sources:[]};
     bank.exams.push(ex);saveBank();showExamDetail(ex.id);
+    const _cs=window._otelTracer?.startSpan('exam.create');_cs?.setAttribute('exam.name',ex.name);_cs?.end();
   });
 }
 
@@ -573,6 +598,7 @@ uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.r
 async function handleFile(file){
   if(!file||file.type!=='application/pdf')return;
   const ex=exam();if(!ex)return;
+  const _ps=window._otelTracer?.startSpan('pdf.upload',{attributes:{'pdf.filename':file.name,'exam.id':ex.id}});
   showStatus(`Reading "${file.name}"…`,'var(--accent)',true);
   try{
     const ab=await file.arrayBuffer();
@@ -580,12 +606,13 @@ async function handleFile(file){
     let txt='';
     for(let p=1;p<=pdf.numPages;p++){const pg=await pdf.getPage(p);txt+=extractLines(await pg.getTextContent())+'\n';}
     const parsed=parseExamTopics(txt);
-    if(!parsed.length){showStatus(`⚠ No questions found in "${file.name}"— check format.`,'var(--danger)');return;}
+    if(!parsed.length){showStatus(`⚠ No questions found in "${file.name}"— check format.`,'var(--danger)');_ps?.setStatus({code:2,message:'no questions found'});_ps?.end();return;}
     const {added,dupes}=mergeIntoBankExam(ex,file.name,parsed);
     await saveBank();renderExamDetail();
     showStatus(`✓ "${file.name}" — ${added} added${dupes?`, ${dupes} dupe${dupes>1?'s':''} skipped`:''}`, 'var(--accent2)');
+    _ps?.setAttribute('pdf.questions_added',added);_ps?.setAttribute('pdf.dupes_skipped',dupes||0);_ps?.end();
     setTimeout(hideStatus,3200);
-  }catch(err){showStatus(`⚠ ${err.message}`,'var(--danger)');console.error(err);}
+  }catch(err){_ps?.recordException(err);_ps?.setStatus({code:2,message:err.message});_ps?.end();showStatus(`⚠ ${err.message}`,'var(--danger)');console.error(err);}
 }
 
 function extractLines(content){
@@ -785,6 +812,7 @@ function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=Math.fl
 
 function launchQuiz(qs){
   quizQ=shuffle(qs);quizCur=0;quizAns={};quizMissed=[];
+  const _qs=window._otelTracer?.startSpan('quiz.start',{attributes:{'quiz.question_count':qs.length,'exam.id':currentExamId}});_qs?.end();
   showQuiz();renderCard();
 }
 
@@ -822,6 +850,7 @@ function pickAnswer(letter,q){
   const correct=q.answer||letter;
   quizAns[quizCur]={sel:letter,correct};
   if(q.answer&&letter!==q.answer)quizMissed.push({...q,myAnswer:letter});
+  const _as=window._otelTracer?.startSpan('quiz.answer',{attributes:{'question.num':q.num,'answer.selected':letter,'answer.correct':correct,'answer.is_correct':letter===correct}});_as?.end();
   renderCard();document.getElementById('cw').classList.add('flipped');
   if(!q.answer){buildInlineSetter(q);document.getElementById('inline-setter').style.display='block';}
 }
@@ -895,6 +924,7 @@ function showResults(){
   const total=quizQ.length,hasKeys=quizQ.some(q=>q.answer);
   let correct=0;for(const a of Object.values(quizAns)){if(a.sel===a.correct)correct++;}
   const pct=total?Math.round(correct/total*100):0;
+  const _rs=window._otelTracer?.startSpan('quiz.complete',{attributes:{'quiz.total':total,'quiz.correct':correct,'quiz.score_pct':pct,'quiz.missed':quizMissed.length,'exam.id':currentExamId}});_rs?.end();
   document.getElementById('final-score').textContent=hasKeys?pct+'%':'✓';
   document.getElementById('final-detail').textContent=hasKeys?`${correct} correct out of ${total}`:`${total} questions completed`;
   document.getElementById('results-panel').style.display='block';
