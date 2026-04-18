@@ -757,12 +757,17 @@ function attachExhibits(parsed,pageData){
 }
 
 function cropGaps(canvas,viewport,gaps){
-  const pad=4;
+  const s=viewport.scale;
+  // topCY is the baseline of the line above the gap; canvas Y increases downward.
+  // We want to start BELOW that baseline (past descenders) and stop ABOVE the
+  // baseline of the line below (past ascenders/cap-height). Typical PDF body text:
+  // descenders ~4pt below baseline, ascenders/cap ~10pt above.
+  const descPx=Math.round(4*s), ascPx=Math.round(10*s);
   const crops=gaps.map(({topPdfY,bottomPdfY})=>{
     const [,topCY]=viewport.convertToViewportPoint(0,topPdfY);
     const [,botCY]=viewport.convertToViewportPoint(0,bottomPdfY);
-    const top=Math.max(0,Math.round(topCY)-pad);
-    const bottom=Math.min(canvas.height,Math.round(botCY)+pad);
+    const top=Math.max(0,Math.round(topCY)+descPx);
+    const bottom=Math.min(canvas.height,Math.round(botCY)-ascPx);
     return{top,h:bottom-top};
   }).filter(c=>c.h>20);
   if(!crops.length)return null;
