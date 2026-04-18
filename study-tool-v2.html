@@ -651,7 +651,7 @@ function extractLines(content){
 }
 function parseExamTopics(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-  const result=[];const reHdr=/^Question\s+#(\d+)\s+Topic/i;const reOpt=/^([A-E])\.\s+(.*)/;
+  const result=[];const reHdr=/^Question\s+#(\d+)\s+Topic/i;const reOpt=/^([A-E])\.\s*(.*)/;
   // Support multi-letter answers: "BD", "B, D", "B D", "B and D"
   const reAns=/^(?:Correct\s+)?Answer[:\s]+([A-E][A-E ,and]*)/i;
   const reSkip=/^(Topic \d+|Next Questions|Viewing (page|questions)|Browse atleast)/i;
@@ -680,7 +680,7 @@ function parseExamTopics(text){
     // Continuation: question lines (before options) or option text
     if(!opts.length)qLines.push(line);else opts[opts.length-1].text+='\n'+line;
   }
-  flush();return result.filter(q=>q.options.some(o=>o.text.trim().length>0));
+  flush();return result.filter(q=>q.options.length>=2);
 }
 
 function mergeIntoBankExam(ex,filename,parsed){
