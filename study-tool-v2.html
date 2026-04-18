@@ -648,10 +648,10 @@ async function handleFile(file){
     const parsed=parseExamTopics(txt);
     if(!parsed.length){showStatus(`⚠ No questions found in "${file.name}"— check format.`,'var(--danger)');_ps?.setStatus({code:2,message:'no questions found'});_ps?.end();return;}
     attachExhibits(parsed,pageData);
-    const {added,dupes}=mergeIntoBankExam(ex,file.name,parsed);
+    const {added,dupes,exhibitsPatched}=mergeIntoBankExam(ex,file.name,parsed);
     await saveBank();renderExamDetail();
-    showStatus(`✓ "${file.name}" — ${added} added${dupes?`, ${dupes} dupe${dupes>1?'s':''} skipped`:''}`, 'var(--accent2)');
-    _ps?.setAttribute('pdf.questions_added',added);_ps?.setAttribute('pdf.dupes_skipped',dupes||0);_ps?.end();
+    showStatus(`✓ "${file.name}" — ${added} added${dupes?`, ${dupes} dupe${dupes>1?'s':''} skipped`:''}${exhibitsPatched?`, ${exhibitsPatched} exhibit${exhibitsPatched>1?'s':''} updated`:''}`, 'var(--accent2)');
+    _ps?.setAttribute('pdf.questions_added',added);_ps?.setAttribute('pdf.dupes_skipped',dupes||0);_ps?.setAttribute('pdf.exhibits_patched',exhibitsPatched||0);_ps?.end();
     setTimeout(hideStatus,3200);
   }catch(err){_ps?.recordException(err);_ps?.setStatus({code:2,message:err.message});_ps?.end();showStatus(`⚠ ${err.message}`,'var(--danger)');console.error(err);}
 }
@@ -750,13 +750,24 @@ function parseExamTopics(text){
 function mergeIntoBankExam(ex,filename,parsed){
   let src=ex.sources.find(s=>s.name===filename);
   if(!src){src={id:uid(),name:filename,added:new Date().toLocaleDateString(),count:0};ex.sources.push(src);}
-  const fps=new Set(bank.questions.filter(q=>q.examId===ex.id).map(q=>fp(q.question)));
-  let added=0,dupes=0;
-  for(const q of parsed){const f=fp(q.question);if(fps.has(f)){dupes++;continue;}fps.add(f);bank.questions.push({id:uid(),examId:ex.id,sourceId:src.id,sourceName:filename,...q});added++;}
+  const existingQs=bank.questions.filter(q=>q.examId===ex.id);
+  const fpMap=new Map(existingQs.map(q=>[fp(q.question),q]));
+  let added=0,dupes=0,exhibitsPatched=0;
+  for(const q of parsed){
+    const f=fp(q.question);
+    const existing=fpMap.get(f);
+    if(existing){
+      // Backfill exhibitImg if the re-import caught one we didn't have before
+      if(q.exhibitImg&&!existing.exhibitImg){existing.exhibitImg=q.exhibitImg;exhibitsPatched++;}
+      dupes++;continue;
+    }
+    fpMap.set(f,null);
+    bank.questions.push({id:uid(),examId:ex.id,sourceId:src.id,sourceName:filename,...q});
+    added++;
+  }
   src.count=bank.questions.filter(q=>q.examId===ex.id&&q.sourceId===src.id).length;
-  // Ensure selected
   selectedSrcs.add(src.id);
-  return{added,dupes};
+  return{added,dupes,exhibitsPatched};
 }
 
 // ══════════════════════════════════════════
