@@ -439,7 +439,67 @@ function loadBank(){
 function saveBank(){
   try{localStorage.setItem('studydeck-v2',JSON.stringify(bank));}catch(e){console.warn('Storage unavailable',e);}
 }
+
+// ── Exhibit IndexedDB ──────────────────────
+let _idb=null;
+function openExhibitDb(){
+  if(_idb)return Promise.resolve(_idb);
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open('studydeck-exhibits',1);
+    req.onupgradeneeded=e=>e.target.result.createObjectStore('exhibits');
+    req.onsuccess=e=>{_idb=e.target.result;resolve(_idb);};
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+async function getExhibit(qid){
+  try{
+    const db=await openExhibitDb();
+    return new Promise(resolve=>{
+      const req=db.transaction('exhibits').objectStore('exhibits').get(qid);
+      req.onsuccess=e=>resolve(e.target.result||null);
+      req.onerror=()=>resolve(null);
+    });
+  }catch{return null;}
+}
+async function setExhibit(qid,img){
+  try{
+    const db=await openExhibitDb();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('exhibits','readwrite');
+      tx.objectStore('exhibits').put(img,qid);
+      tx.oncomplete=resolve;tx.onerror=e=>reject(e.target.error);
+    });
+  }catch(e){console.warn('IDB write failed',e);}
+}
+async function deleteExhibits(qids){
+  if(!qids.length)return;
+  try{
+    const db=await openExhibitDb();
+    return new Promise(resolve=>{
+      const tx=db.transaction('exhibits','readwrite');
+      const store=tx.objectStore('exhibits');
+      for(const qid of qids)store.delete(qid);
+      tx.oncomplete=resolve;tx.onerror=resolve;
+    });
+  }catch{}
+}
+// One-time migration: move exhibitImg off localStorage question objects → IDB
+async function migrateExhibitsToIdb(){
+  const qs=bank.questions.filter(q=>q.exhibitImg);
+  if(!qs.length)return;
+  const db=await openExhibitDb();
+  await new Promise(resolve=>{
+    const tx=db.transaction('exhibits','readwrite');
+    const store=tx.objectStore('exhibits');
+    for(const q of qs){store.put(q.exhibitImg,q.id);delete q.exhibitImg;}
+    tx.oncomplete=resolve;tx.onerror=resolve;
+  });
+  saveBank();
+  console.log(`Migrated ${qs.length} exhibit(s) from localStorage → IndexedDB`);
+}
+
 loadBank();
+migrateExhibitsToIdb();
 
 // ── Helpers ───────────────────────────────
 function uid(){return Math.random().toString(36).slice(2,10);}
@@ -564,6 +624,7 @@ document.getElementById('btn-delete-exam').addEventListener('click',()=>{
 
 function deleteExam(id){
   bank.exams=bank.exams.filter(e=>e.id!==id);
+  deleteExhibits(bank.questions.filter(q=>q.examId===id).map(q=>q.id));
   bank.questions=bank.questions.filter(q=>q.examId!==id);
   saveBank();renderExamsList();
 }
@@ -648,7 +709,7 @@ async function handleFile(file){
     const parsed=parseExamTopics(txt);
     if(!parsed.length){showStatus(`⚠ No questions found in "${file.name}"— check format.`,'var(--danger)');_ps?.setStatus({code:2,message:'no questions found'});_ps?.end();return;}
     attachExhibits(parsed,pageData);
-    const {added,dupes,exhibitsPatched}=mergeIntoBankExam(ex,file.name,parsed);
+    const {added,dupes,exhibitsPatched}=await mergeIntoBankExam(ex,file.name,parsed);
     await saveBank();renderExamDetail();
     showStatus(`✓ "${file.name}" — ${added} added${dupes?`, ${dupes} dupe${dupes>1?'s':''} skipped`:''}${exhibitsPatched?`, ${exhibitsPatched} exhibit${exhibitsPatched>1?'s':''} updated`:''}`, 'var(--accent2)');
     _ps?.setAttribute('pdf.questions_added',added);_ps?.setAttribute('pdf.dupes_skipped',dupes||0);_ps?.setAttribute('pdf.exhibits_patched',exhibitsPatched||0);_ps?.end();
@@ -747,7 +808,7 @@ function parseExamTopics(text){
   flush();return result.filter(q=>q.options.length>=2);
 }
 
-function mergeIntoBankExam(ex,filename,parsed){
+async function mergeIntoBankExam(ex,filename,parsed){
   let src=ex.sources.find(s=>s.name===filename);
   if(!src){src={id:uid(),name:filename,added:new Date().toLocaleDateString(),count:0};ex.sources.push(src);}
   const existingQs=bank.questions.filter(q=>q.examId===ex.id);
@@ -757,12 +818,14 @@ function mergeIntoBankExam(ex,filename,parsed){
     const f=fp(q.question);
     const existing=fpMap.get(f);
     if(existing){
-      // Backfill exhibitImg if the re-import caught one we didn't have before
-      if(q.exhibitImg&&!existing.exhibitImg){existing.exhibitImg=q.exhibitImg;exhibitsPatched++;}
+      if(q.exhibitImg){await setExhibit(existing.id,q.exhibitImg);exhibitsPatched++;}
       dupes++;continue;
     }
-    fpMap.set(f,null);
-    bank.questions.push({id:uid(),examId:ex.id,sourceId:src.id,sourceName:filename,...q});
+    const newQ={id:uid(),examId:ex.id,sourceId:src.id,sourceName:filename,...q};
+    const img=newQ.exhibitImg;delete newQ.exhibitImg;
+    if(img)await setExhibit(newQ.id,img);
+    fpMap.set(f,newQ);
+    bank.questions.push(newQ);
     added++;
   }
   src.count=bank.questions.filter(q=>q.examId===ex.id&&q.sourceId===src.id).length;
@@ -795,6 +858,8 @@ function renderSourceList(){
     const ans=document.createElement('span');ans.className='src-ans '+ac;ans.textContent=`${keyed}/${srcQs.length} ans`;
     const del=document.createElement('button');del.className='src-del';del.textContent='✕';
     del.addEventListener('click',e=>{e.stopPropagation();if(confirm(`Remove "${src.name}"?`)){
+      const toRemove=bank.questions.filter(q=>q.examId===currentExamId&&q.sourceId===src.id);
+      deleteExhibits(toRemove.map(q=>q.id));
       ex.sources=ex.sources.filter(s=>s.id!==src.id);
       bank.questions=bank.questions.filter(q=>!(q.examId===currentExamId&&q.sourceId===src.id));
       selectedSrcs.delete(src.id);saveBank();renderExamDetail();
@@ -970,8 +1035,11 @@ function renderCard(){
   document.getElementById('qnum').textContent=`Question #${q.num}`;
   document.getElementById('qtext').textContent=q.question;
   const exhibitEl=document.getElementById('q-exhibit');
-  if(q.exhibitImg){exhibitEl.innerHTML=`<img class="exhibit-img" src="${q.exhibitImg}">`;exhibitEl.style.display='block';}
-  else{exhibitEl.innerHTML='';exhibitEl.style.display='none';}
+  exhibitEl.innerHTML='';exhibitEl.style.display='none';
+  getExhibit(q.id).then(img=>{
+    if(!img||quizQ[quizCur]?.id!==q.id)return;
+    exhibitEl.innerHTML=`<img class="exhibit-img" src="${img}">`;exhibitEl.style.display='block';
+  });
   const mc=multiCount(q);
   const list=document.getElementById('opts-list');list.innerHTML='';
   const ans=quizAns[quizCur];
