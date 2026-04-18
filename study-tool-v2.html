@@ -210,6 +210,7 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .opt-btn.partial-correct .ol{color:var(--orange);}
 .flip-hint{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);text-align:center;margin-top:12px;opacity:.35;}
 .opts-list{list-style:none;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;scrollbar-width:thin;}
+.exhibit-img{max-width:100%;border-radius:8px;margin-bottom:12px;display:block;}
 .opt-btn{width:100%;text-align:left;padding:10px 14px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem;cursor:pointer;transition:all .17s;display:flex;gap:9px;align-items:flex-start;line-height:1.5;}
 .opt-btn:hover:not(:disabled){border-color:var(--accent);background:#1e1c14;}
 .opt-btn .ol{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--accent);min-width:15px;padding-top:2px;font-weight:500;flex-shrink:0;}
@@ -348,6 +349,7 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
       </div>
       <div class="cf cb">
         <div class="cl"><div class="cl-left"><span class="dot"></span> Answer Choices</div></div>
+        <div id="q-exhibit" style="display:none"></div>
         <ul class="opts-list" id="opts-list"></ul>
       </div>
     </div>
@@ -632,9 +634,20 @@ async function handleFile(file){
     const ab=await file.arrayBuffer();
     const pdf=await pdfjsLib.getDocument({data:ab}).promise;
     let txt='';
-    for(let p=1;p<=pdf.numPages;p++){const pg=await pdf.getPage(p);txt+=extractLines(await pg.getTextContent())+'\n';}
+    const pageData=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const pg=await pdf.getPage(p);
+      const viewport=pg.getViewport({scale:1.5});
+      const canvas=document.createElement('canvas');
+      canvas.width=viewport.width;canvas.height=viewport.height;
+      await pg.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      const {text,lines}=extractLinesAndPos(await pg.getTextContent(),viewport);
+      txt+=text+'\n';
+      pageData.push({canvas,viewport,lines});
+    }
     const parsed=parseExamTopics(txt);
     if(!parsed.length){showStatus(`⚠ No questions found in "${file.name}"— check format.`,'var(--danger)');_ps?.setStatus({code:2,message:'no questions found'});_ps?.end();return;}
+    attachExhibits(parsed,pageData);
     const {added,dupes}=mergeIntoBankExam(ex,file.name,parsed);
     await saveBank();renderExamDetail();
     showStatus(`✓ "${file.name}" — ${added} added${dupes?`, ${dupes} dupe${dupes>1?'s':''} skipped`:''}`, 'var(--accent2)');
@@ -643,11 +656,62 @@ async function handleFile(file){
   }catch(err){_ps?.recordException(err);_ps?.setStatus({code:2,message:err.message});_ps?.end();showStatus(`⚠ ${err.message}`,'var(--danger)');console.error(err);}
 }
 
-function extractLines(content){
-  if(!content.items.length)return'';
+function extractLinesAndPos(content,viewport){
+  if(!content.items.length)return{text:'',lines:[]};
   const rows={};
   for(const item of content.items){const y=Math.round(item.transform[5]);if(!rows[y])rows[y]=[];rows[y].push(item);}
-  return Object.keys(rows).map(Number).sort((a,b)=>b-a).map(y=>rows[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(' ').trim()).filter(Boolean).join('\n');
+  const lines=Object.keys(rows).map(Number).sort((a,b)=>b-a).map(pdfY=>({
+    pdfY,
+    text:rows[pdfY].sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(' ').trim()
+  })).filter(l=>l.text);
+  return{text:lines.map(l=>l.text).join('\n'),lines};
+}
+
+function attachExhibits(parsed,pageData){
+  const optRe=/^[A-E]\.\s*/;
+  for(const q of parsed){
+    const headerRe=new RegExp(`Question\\s+#${q.num}\\s+Topic`,'i');
+    for(const pd of pageData){
+      const hi=pd.lines.findIndex(l=>headerRe.test(l.text));
+      if(hi===-1)continue;
+      // Find last line of this question (last option or last body line)
+      let endIdx=hi+1;
+      for(let i=hi+1;i<pd.lines.length;i++){
+        // Stop when we hit the next question header
+        if(/^Question\s+#\d+\s+Topic/i.test(pd.lines[i].text))break;
+        endIdx=i;
+      }
+      // Collect all gaps ≥70pt between consecutive lines in this question's region
+      const gaps=[];
+      for(let i=hi+1;i<=endIdx;i++){
+        const gap=pd.lines[i-1].pdfY-pd.lines[i].pdfY;
+        if(gap>=70)gaps.push({topPdfY:pd.lines[i-1].pdfY,bottomPdfY:pd.lines[i].pdfY});
+      }
+      if(!gaps.length)break;
+      const img=cropGaps(pd.canvas,pd.viewport,gaps);
+      if(img)q.exhibitImg=img;
+      break;
+    }
+  }
+}
+
+function cropGaps(canvas,viewport,gaps){
+  const pad=4;
+  const crops=gaps.map(({topPdfY,bottomPdfY})=>{
+    const [,topCY]=viewport.convertToViewportPoint(0,topPdfY);
+    const [,botCY]=viewport.convertToViewportPoint(0,bottomPdfY);
+    const top=Math.max(0,Math.round(topCY)-pad);
+    const bottom=Math.min(canvas.height,Math.round(botCY)+pad);
+    return{top,h:bottom-top};
+  }).filter(c=>c.h>20);
+  if(!crops.length)return null;
+  const totalH=crops.reduce((s,c)=>s+c.h,0);
+  const out=document.createElement('canvas');
+  out.width=canvas.width;out.height=totalH;
+  const ctx=out.getContext('2d');
+  let y=0;
+  for(const{top,h}of crops){ctx.drawImage(canvas,0,top,canvas.width,h,0,y,canvas.width,h);y+=h;}
+  return out.toDataURL('image/jpeg',0.65);
 }
 function parseExamTopics(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -894,6 +958,9 @@ function renderCard(){
   document.getElementById('ctag').textContent=(q.sourceName||'').replace(/\.pdf$/i,'');
   document.getElementById('qnum').textContent=`Question #${q.num}`;
   document.getElementById('qtext').textContent=q.question;
+  const exhibitEl=document.getElementById('q-exhibit');
+  if(q.exhibitImg){exhibitEl.innerHTML=`<img class="exhibit-img" src="${q.exhibitImg}">`;exhibitEl.style.display='block';}
+  else{exhibitEl.innerHTML='';exhibitEl.style.display='none';}
   const mc=multiCount(q);
   const list=document.getElementById('opts-list');list.innerHTML='';
   const ans=quizAns[quizCur];
