@@ -210,7 +210,8 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .opt-btn.partial-correct .ol{color:var(--orange);}
 .flip-hint{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);text-align:center;margin-top:12px;opacity:.35;}
 .opts-list{list-style:none;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;scrollbar-width:thin;}
-.exhibit-img{max-width:100%;border-radius:8px;margin-bottom:12px;display:block;}
+#q-exhibit{max-height:240px;overflow-y:auto;margin-bottom:10px;border-radius:8px;}
+.exhibit-img{max-width:100%;display:block;border-radius:8px;}
 .opt-btn{width:100%;text-align:left;padding:10px 14px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem;cursor:pointer;transition:all .17s;display:flex;gap:9px;align-items:flex-start;line-height:1.5;}
 .opt-btn:hover:not(:disabled){border-color:var(--accent);background:#1e1c14;}
 .opt-btn .ol{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--accent);min-width:15px;padding-top:2px;font-weight:500;flex-shrink:0;}
@@ -742,9 +743,12 @@ function attachExhibits(parsed,pageData){
         if(/^Question\s+#\d+\s+Topic/i.test(pd.lines[i].text))break;
         endIdx=i;
       }
-      // Collect all gaps ≥70pt between consecutive lines in this question's region
+      // Only scan up to (but not including) the first option letter — gaps between
+      // option letters (A→B, B→C) are answer content, not question exhibits
+      const firstOptIdx=pd.lines.findIndex((l,i)=>i>hi&&optRe.test(l.text));
+      const scanEnd=firstOptIdx===-1?endIdx:firstOptIdx-1;
       const gaps=[];
-      for(let i=hi+1;i<=endIdx;i++){
+      for(let i=hi+1;i<=scanEnd;i++){
         const gap=pd.lines[i-1].pdfY-pd.lines[i].pdfY;
         if(gap>=70)gaps.push({topPdfY:pd.lines[i-1].pdfY,bottomPdfY:pd.lines[i].pdfY});
       }
