@@ -212,6 +212,7 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .opts-list{list-style:none;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;scrollbar-width:thin;}
 #q-exhibit{max-height:240px;overflow-y:auto;margin-bottom:10px;border-radius:8px;}
 .exhibit-img{max-width:100%;display:block;border-radius:8px;}
+.opt-exhibit-img{max-width:100%;display:block;margin-top:6px;border-radius:4px;}
 .opt-btn{width:100%;text-align:left;padding:10px 14px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem;cursor:pointer;transition:all .17s;display:flex;gap:9px;align-items:flex-start;line-height:1.5;}
 .opt-btn:hover:not(:disabled){border-color:var(--accent);background:#1e1c14;}
 .opt-btn .ol{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--accent);min-width:15px;padding-top:2px;font-weight:500;flex-shrink:0;}
@@ -479,7 +480,7 @@ async function deleteExhibits(qids){
     return new Promise(resolve=>{
       const tx=db.transaction('exhibits','readwrite');
       const store=tx.objectStore('exhibits');
-      for(const qid of qids)store.delete(qid);
+      for(const qid of qids){store.delete(qid);for(const l of ['A','B','C','D','E'])store.delete(qid+'_'+l);}
       tx.oncomplete=resolve;tx.onerror=resolve;
     });
   }catch{}
@@ -730,31 +731,42 @@ function extractLinesAndPos(content,viewport){
 }
 
 function attachExhibits(parsed,pageData){
-  const optRe=/^[A-E]\.\s*/;
+  const optRe=/^([A-E])\.\s*/;
   for(const q of parsed){
     const headerRe=new RegExp(`Question\\s+#${q.num}\\s+Topic`,'i');
     for(const pd of pageData){
       const hi=pd.lines.findIndex(l=>headerRe.test(l.text));
       if(hi===-1)continue;
-      // Find last line of this question (last option or last body line)
       let endIdx=hi+1;
       for(let i=hi+1;i<pd.lines.length;i++){
-        // Stop when we hit the next question header
         if(/^Question\s+#\d+\s+Topic/i.test(pd.lines[i].text))break;
         endIdx=i;
       }
-      // Only scan up to (but not including) the first option letter — gaps between
-      // option letters (A→B, B→C) are answer content, not question exhibits
+      // Question exhibit: gaps before the first option letter
       const firstOptIdx=pd.lines.findIndex((l,i)=>i>hi&&optRe.test(l.text));
       const scanEnd=firstOptIdx===-1?endIdx:firstOptIdx-1;
-      const gaps=[];
+      const qGaps=[];
       for(let i=hi+1;i<=scanEnd;i++){
         const gap=pd.lines[i-1].pdfY-pd.lines[i].pdfY;
-        if(gap>=70)gaps.push({topPdfY:pd.lines[i-1].pdfY,bottomPdfY:pd.lines[i].pdfY});
+        if(gap>=70)qGaps.push({topPdfY:pd.lines[i-1].pdfY,bottomPdfY:pd.lines[i].pdfY});
       }
-      if(!gaps.length)break;
-      const img=cropGaps(pd.canvas,pd.viewport,gaps);
-      if(img)q.exhibitImg=img;
+      if(qGaps.length){const img=cropGaps(pd.canvas,pd.viewport,qGaps);if(img)q.exhibitImg=img;}
+      // Per-option exhibits: gap between each option letter and the next
+      if(firstOptIdx!==-1){
+        const optLines=pd.lines.slice(firstOptIdx,endIdx+1);
+        for(let i=0;i<optLines.length;i++){
+          const m=optLines[i].text.match(optRe);if(!m)continue;
+          const letter=m[1];
+          // Find next option letter line
+          let nextOptI=optLines.length;
+          for(let j=i+1;j<optLines.length;j++){if(optRe.test(optLines[j].text)){nextOptI=j;break;}}
+          if(nextOptI>=optLines.length)continue; // last option — no "next" to bound the gap
+          const gap=optLines[i].pdfY-optLines[nextOptI].pdfY;
+          if(gap<70)continue;
+          const img=cropGaps(pd.canvas,pd.viewport,[{topPdfY:optLines[i].pdfY,bottomPdfY:optLines[nextOptI].pdfY}]);
+          if(img){const opt=q.options.find(o=>o.letter===letter);if(opt)opt.exhibitImg=img;}
+        }
+      }
       break;
     }
   }
@@ -828,11 +840,13 @@ async function mergeIntoBankExam(ex,filename,parsed){
     const existing=fpMap.get(f);
     if(existing){
       if(q.exhibitImg){await setExhibit(existing.id,q.exhibitImg);exhibitsPatched++;}
+      for(const opt of q.options){if(opt.exhibitImg){await setExhibit(existing.id+'_'+opt.letter,opt.exhibitImg);}}
       dupes++;continue;
     }
     const newQ={id:uid(),examId:ex.id,sourceId:src.id,sourceName:filename,...q};
     const img=newQ.exhibitImg;delete newQ.exhibitImg;
     if(img)await setExhibit(newQ.id,img);
+    for(const opt of newQ.options){const oi=opt.exhibitImg;delete opt.exhibitImg;if(oi)await setExhibit(newQ.id+'_'+opt.letter,oi);}
     fpMap.set(f,newQ);
     bank.questions.push(newQ);
     added++;
@@ -1090,6 +1104,12 @@ function renderCard(){
       btn.addEventListener('click',e=>{e.stopPropagation();pickAnswer(opt.letter,q);});
     }
     li.appendChild(btn);list.appendChild(li);
+    // Load per-option exhibit image async
+    getExhibit(q.id+'_'+opt.letter).then(img=>{
+      if(!img||quizQ[quizCur]?.id!==q.id)return;
+      const ie=document.createElement('img');ie.className='opt-exhibit-img';ie.src=img;
+      btn.appendChild(ie);
+    });
   });
   const total=quizQ.length,done=Object.keys(quizAns).length;
   document.getElementById('prog-text').textContent=`Q ${quizCur+1} of ${total}`;
