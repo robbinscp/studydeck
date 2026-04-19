@@ -347,11 +347,11 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
         <div class="cl"><div class="cl-left"><span class="dot"></span> Question</div><span class="ctag" id="ctag"></span></div>
         <div class="qnum" id="qnum"></div>
         <div class="qtext" id="qtext"></div>
+        <div id="q-exhibit" style="display:none"></div>
         <div class="flip-hint">↩ click to reveal choices · F flip · ← → navigate</div>
       </div>
       <div class="cf cb">
         <div class="cl"><div class="cl-left"><span class="dot"></span> Answer Choices</div></div>
-        <div id="q-exhibit" style="display:none"></div>
         <ul class="opts-list" id="opts-list"></ul>
       </div>
     </div>
@@ -760,10 +760,18 @@ function attachExhibits(parsed,pageData){
           // Find next option letter line
           let nextOptI=optLines.length;
           for(let j=i+1;j<optLines.length;j++){if(optRe.test(optLines[j].text)){nextOptI=j;break;}}
-          if(nextOptI>=optLines.length)continue; // last option — no "next" to bound the gap
-          const gap=optLines[i].pdfY-optLines[nextOptI].pdfY;
+          let bottomPdfY;
+          if(nextOptI>=optLines.length){
+            // Last option — use the line after endIdx (next question header) as bottom boundary
+            const afterEnd=pd.lines[endIdx+1];
+            if(!afterEnd)continue;
+            bottomPdfY=afterEnd.pdfY;
+          }else{
+            bottomPdfY=optLines[nextOptI].pdfY;
+          }
+          const gap=optLines[i].pdfY-bottomPdfY;
           if(gap<70)continue;
-          const img=cropGaps(pd.canvas,pd.viewport,[{topPdfY:optLines[i].pdfY,bottomPdfY:optLines[nextOptI].pdfY}]);
+          const img=cropGaps(pd.canvas,pd.viewport,[{topPdfY:optLines[i].pdfY,bottomPdfY}]);
           if(img){const opt=q.options.find(o=>o.letter===letter);if(opt)opt.exhibitImg=img;}
         }
       }
