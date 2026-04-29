@@ -408,8 +408,13 @@ let quizQ=[],quizCur=0,quizAns={},quizMissed=[],quizPending={};
 function ansArr(a){if(!a)return[];return Array.isArray(a)?a:[a];}
 // Check if a question has an answer set
 function hasAns(q){const a=ansArr(q.answer);return a.length>0;}
-// Number of answers expected (defaults to 1 for legacy questions)
-function multiCount(q){return q.multi||1;}
+// Number of answers expected; falls back to parsing question text for legacy questions
+const _mcWordToNum={one:1,two:2,three:3,four:4,five:5};
+function multiCount(q){
+  if(q.multi>1)return q.multi;
+  const m=(q.question||'').match(/\((?:choose|select)\s+(\w+)\.?\)/i);
+  return m?(_mcWordToNum[m[1].toLowerCase()]||parseInt(m[1])||1):1;
+}
 // Check if two answer values are equal (handles string or array)
 function isCorrectAns(sel,correct){
   const s=ansArr(sel).slice().sort().join('');const c=ansArr(correct).slice().sort().join('');
@@ -839,6 +844,7 @@ async function mergeIntoBankExam(ex,filename,parsed){
     const f=fp(q.question);
     const existing=fpMap.get(f);
     if(existing){
+      if(q.multi>1&&!existing.multi)existing.multi=q.multi;
       if(q.exhibitImg){await setExhibit(existing.id,q.exhibitImg);exhibitsPatched++;}
       for(const opt of q.options){if(opt.exhibitImg){await setExhibit(existing.id+'_'+opt.letter,opt.exhibitImg);}}
       dupes++;continue;
