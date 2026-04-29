@@ -189,27 +189,25 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .sc .sv{font-family:'Playfair Display',serif;font-size:1.7rem;font-weight:700;line-height:1;}
 .sc .sl{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
 .sc.cor .sv{color:var(--accent2);}.sc.mis .sv{color:var(--danger);}.sc.rem .sv{color:var(--accent);}
-#card-area{perspective:1200px;}
-.cw{position:relative;width:100%;min-height:450px;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1);cursor:pointer;}
-.cw.flipped{transform:rotateY(180deg);}
-.cf{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:16px;padding:26px 32px;display:flex;flex-direction:column;border:1px solid var(--border);background:var(--surface);overflow:hidden;}
-.cf::before{content:'';position:absolute;top:-50px;right:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(232,197,71,.06) 0%,transparent 70%);pointer-events:none;}
-.cb{transform:rotateY(180deg);}
-.cb::before{background:radial-gradient(circle,rgba(92,232,176,.06) 0%,transparent 70%);}
+#card-area{}
+.qcard{position:relative;width:100%;border-radius:16px;padding:26px 32px;border:1px solid var(--border);background:var(--surface);overflow:hidden;transition:border-color .25s,box-shadow .25s;}
+.qcard::before{content:'';position:absolute;top:-50px;right:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(232,197,71,.06) 0%,transparent 70%);pointer-events:none;}
+.qcard.answered-correct{border-color:rgba(92,232,176,.5);box-shadow:0 0 0 1px rgba(92,232,176,.15);}
+.qcard.answered-wrong{border-color:rgba(232,92,92,.5);box-shadow:0 0 0 1px rgba(232,92,92,.15);}
+.qcard.answered-nokey{border-color:rgba(232,197,71,.4);box-shadow:0 0 0 1px rgba(232,197,71,.1);}
 .cl{font-family:'DM Mono',monospace;font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
 .cl-left{display:flex;align-items:center;gap:6px;}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;}
-.cb .dot{background:var(--accent2);}
 .ctag{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--purple);background:rgba(167,139,250,.1);padding:2px 8px;border-radius:99px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .qnum{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--accent);margin-bottom:8px;opacity:.6;}
-.qtext{font-size:clamp(.95rem,2vw,1.1rem);line-height:1.72;flex:1;overflow-y:auto;scrollbar-width:thin;white-space:pre-wrap;}
+.qtext{font-size:clamp(.95rem,2vw,1.1rem);line-height:1.72;white-space:pre-wrap;margin-bottom:16px;}
 .multi-hint{font-family:'DM Mono',monospace;font-size:.67rem;color:var(--orange);background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.25);border-radius:6px;padding:4px 10px;margin-bottom:8px;display:inline-block;}
 .opt-btn.multi-sel{border-color:var(--accent);background:rgba(232,197,71,.09);}
 .opt-btn.multi-sel .ol{color:var(--accent);}
 .opt-btn.partial-correct{border-color:var(--orange);background:rgba(251,146,60,.08);color:var(--orange);}
 .opt-btn.partial-correct .ol{color:var(--orange);}
-.flip-hint{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);text-align:center;margin-top:12px;opacity:.35;}
-.opts-list{list-style:none;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;scrollbar-width:thin;}
+.key-hint{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);text-align:center;margin-top:14px;opacity:.3;letter-spacing:.04em;}
+.opts-list{list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:16px;}
 #q-exhibit{max-height:240px;overflow-y:auto;margin-bottom:10px;border-radius:8px;}
 .exhibit-img{max-width:100%;display:block;border-radius:8px;}
 .opt-exhibit-img{max-width:100%;display:block;margin-top:6px;border-radius:4px;}
@@ -342,18 +340,13 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
     <div class="sc rem"><div class="sv" id="sc-rem">0</div><div class="sl">Left</div></div>
   </div>
   <div id="card-area">
-    <div class="cw" id="cw">
-      <div class="cf">
-        <div class="cl"><div class="cl-left"><span class="dot"></span> Question</div><span class="ctag" id="ctag"></span></div>
-        <div class="qnum" id="qnum"></div>
-        <div class="qtext" id="qtext"></div>
-        <div id="q-exhibit" style="display:none"></div>
-        <div class="flip-hint">↩ click to reveal choices · F flip · ← → navigate</div>
-      </div>
-      <div class="cf cb">
-        <div class="cl"><div class="cl-left"><span class="dot"></span> Answer Choices</div></div>
-        <ul class="opts-list" id="opts-list"></ul>
-      </div>
+    <div class="qcard" id="qcard">
+      <div class="cl"><div class="cl-left"><span class="dot"></span> Question</div><span class="ctag" id="ctag"></span></div>
+      <div class="qnum" id="qnum"></div>
+      <div class="qtext" id="qtext"></div>
+      <div id="q-exhibit" style="display:none"></div>
+      <ul class="opts-list" id="opts-list"></ul>
+      <div class="key-hint">A–E to answer · Space / → to advance · ← previous</div>
     </div>
     <div id="inline-setter">
       <p>⚠ No answer key — set the correct answer to track your score:</p>
@@ -364,7 +357,6 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
     <button class="btn" id="q-prev">← Prev</button>
     <button class="btn primary" id="q-next">Next →</button>
     <button class="btn orange" id="q-submit-multi" style="display:none;">✓ Submit Answers</button>
-    <button class="btn" id="q-flip">Flip</button>
     <button class="btn orange" id="q-setans">✏ Set Answer</button>
     <button class="btn purple" id="q-back">⊞ Back</button>
     <button class="btn danger" id="q-restart">↺ Restart</button>
@@ -1058,7 +1050,6 @@ function launchQuiz(qs){
 
 function renderCard(){
   const q=quizQ[quizCur];
-  document.getElementById('cw').classList.remove('flipped');
   document.getElementById('inline-setter').style.display='none';
   // Sync latest answer from bank
   const lq=bank.questions.find(b=>b.id===q.id);if(lq){q.answer=lq.answer;q.multi=lq.multi;}
@@ -1074,6 +1065,10 @@ function renderCard(){
   const mc=multiCount(q);
   const list=document.getElementById('opts-list');list.innerHTML='';
   const ans=quizAns[quizCur];
+  // Update card answered-state border
+  const qcard=document.getElementById('qcard');
+  qcard.classList.remove('answered-correct','answered-wrong','answered-nokey');
+  if(ans){if(hasAns(q))qcard.classList.add(isCorrectAns(ans.sel,ans.correct)?'answered-correct':'answered-wrong');else qcard.classList.add('answered-nokey');}
   const pending=quizPending[quizCur]||(quizPending[quizCur]=new Set());
   // Multi-hint
   const existingHint=document.getElementById('multi-hint-el');if(existingHint)existingHint.remove();
@@ -1106,7 +1101,7 @@ function renderCard(){
       btn.addEventListener('click',e=>{
         e.stopPropagation();
         if(pending.has(opt.letter))pending.delete(opt.letter);else pending.add(opt.letter);
-        renderCard();document.getElementById('cw').classList.add('flipped');
+        renderCard();
       });
     }else{
       btn.addEventListener('click',e=>{e.stopPropagation();pickAnswer(opt.letter,q);});
@@ -1133,7 +1128,7 @@ function pickAnswer(selRaw,q){
   quizAns[quizCur]={sel,correct};
   if(hasAns(q)&&!isCorrectAns(sel,correct))quizMissed.push({...q,myAnswer:sel});
   const _as=window._otelTracer?.startSpan('quiz.answer',{attributes:{'question.num':q.num,'answer.selected':fmtAns(sel),'answer.correct':fmtAns(correct),'answer.is_correct':isCorrectAns(sel,correct)}});_as?.end();
-  renderCard();document.getElementById('cw').classList.add('flipped');
+  renderCard();
   if(!hasAns(q)){buildInlineSetter(q);document.getElementById('inline-setter').style.display='block';}
 }
 
@@ -1155,7 +1150,7 @@ function buildInlineSetter(q){
         q.answer=opt.letter;saveBank();updateAnsBadge();
         const cur=quizAns[quizCur];if(cur){cur.correct=opt.letter;if(cur.sel!==opt.letter&&!quizMissed.find(m=>m.id===q.id))quizMissed.push({...q,myAnswer:cur.sel});}
         document.getElementById('inline-setter').style.display='none';
-        renderCard();document.getElementById('cw').classList.add('flipped');
+        renderCard();
       }else{
         // Multi: toggle
         if(inlineSelected.has(opt.letter)){inlineSelected.delete(opt.letter);btn.style.borderColor='';}
@@ -1175,7 +1170,7 @@ function buildInlineSetter(q){
       const cur=quizAns[quizCur];
       if(cur){cur.correct=letters;if(!isCorrectAns(cur.sel,letters)&&!quizMissed.find(m=>m.id===q.id))quizMissed.push({...q,myAnswer:cur.sel});}
       document.getElementById('inline-setter').style.display='none';
-      renderCard();document.getElementById('cw').classList.add('flipped');
+      renderCard();
     });opts.appendChild(saveBtn);
   }
 }
@@ -1196,8 +1191,6 @@ document.getElementById('q-submit-multi').addEventListener('click',()=>{
 });
 
 // Controls
-document.getElementById('cw').addEventListener('click',()=>document.getElementById('cw').classList.toggle('flipped'));
-document.getElementById('q-flip').addEventListener('click',()=>document.getElementById('cw').classList.toggle('flipped'));
 document.getElementById('q-next').addEventListener('click',()=>{if(quizCur<quizQ.length-1){quizCur++;renderCard();}else showResults();});
 document.getElementById('q-prev').addEventListener('click',()=>{if(quizCur>0){quizCur--;renderCard();}});
 document.getElementById('q-restart').addEventListener('click',()=>launchQuiz(quizQ));
@@ -1220,7 +1213,6 @@ document.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;
   if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('q-next').click();}
   if(e.key==='ArrowLeft'){e.preventDefault();document.getElementById('q-prev').click();}
-  if(e.key==='f'||e.key==='F')document.getElementById('q-flip').click();
   // A-E to pick answer or set inline answer key
   const letter=e.key.toUpperCase();if(/^[A-E]$/.test(letter)){
     const setter=document.getElementById('inline-setter');
@@ -1237,7 +1229,7 @@ document.addEventListener('keydown',e=>{
       // Toggle pending selection
       const pending=quizPending[quizCur]||(quizPending[quizCur]=new Set());
       if(pending.has(letter))pending.delete(letter);else pending.add(letter);
-      renderCard();document.getElementById('cw').classList.add('flipped');
+      renderCard();
     }else{
       pickAnswer(opt.letter,q);
     }
