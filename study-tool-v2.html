@@ -424,7 +424,7 @@ function isCorrectAns(sel,correct){
 function fmtAns(a){return ansArr(a).join(', ');}
 // Parse an answer string from CSV/inline: 'AB' or 'A,B' or 'A' → array or string
 function parseAnsStr(s){
-  const letters=[...s.toUpperCase().matchAll(/[A-E]/g)].map(m=>m[0]);
+  const letters=[...s.toUpperCase().matchAll(/[A-J]/g)].map(m=>m[0]);
   if(!letters.length)return null;
   return letters.length===1?letters[0]:letters;
 }
@@ -728,7 +728,7 @@ function extractLinesAndPos(content,viewport){
 }
 
 function attachExhibits(parsed,pageData){
-  const optRe=/^([A-E])\.\s*/;
+  const optRe=/^([A-J])\.\s*/;
   for(const q of parsed){
     const headerRe=new RegExp(`Question\\s+#${q.num}\\s+Topic`,'i');
     for(const pd of pageData){
@@ -802,9 +802,9 @@ function cropGaps(canvas,viewport,gaps){
 }
 function parseExamTopics(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-  const result=[];const reHdr=/^Question\s+#(\d+)\s+Topic/i;const reOpt=/^([A-E])\.\s*(.*)/;
+  const result=[];const reHdr=/^Question\s+#(\d+)\s+Topic/i;const reOpt=/^([A-J])\.\s*(.*)/;
   // Support multi-letter answers: "BD", "B, D", "B D", "B and D"
-  const reAns=/^(?:Correct\s+)?Answer[:\s]+([A-E][A-E ,and]*)/i;
+  const reAns=/^(?:Correct\s+)?Answer[:\s]+([A-J][A-J ,and]*)/i;
   const reSkip=/^(Topic \d+|Next Questions|Viewing (page|questions)|Browse atleast)/i;
   const wordToNum={one:1,two:2,three:3,four:4,five:5,'1':1,'2':2,'3':3,'4':4,'5':5};
   let qNum=null,qLines=[],opts=[],answer=null;
@@ -823,7 +823,7 @@ function parseExamTopics(text){
     if(qNum===null)continue;
     const am=line.match(reAns);
     if(am){
-      const letters=[...am[1].toUpperCase().matchAll(/[A-E]/g)].map(m=>m[0]);
+      const letters=[...am[1].toUpperCase().matchAll(/[A-J]/g)].map(m=>m[0]);
       answer=letters.length===1?letters[0]:letters.length>1?letters:null;
       continue;
     }
@@ -1017,20 +1017,60 @@ document.getElementById('btn-export').addEventListener('click',()=>{
   a.download=`${exam()?.name||'exam'}-answers.csv`.replace(/\s+/g,'-');a.click();
 });
 document.getElementById('btn-import-trigger').addEventListener('click',()=>document.getElementById('csv-input').click());
+// Parse one CSV row respecting double-quoted fields ("" is an escaped quote).
+function parseCsvRow(line){
+  const out=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(inQ){
+      if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}
+      else cur+=c;
+    }else{
+      if(c===',')out.push(cur),cur='';
+      else if(c==='"'&&!cur)inQ=true;
+      else cur+=c;
+    }
+  }
+  out.push(cur);return out;
+}
 document.getElementById('csv-input').addEventListener('change',e=>{
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=ev=>{
-    const lines=ev.target.result.split('\n').slice(1);let updated=0;
-    lines.forEach(line=>{
-      const parts=line.split(',');if(parts.length<5)return;
-      const id=parts[0].trim();const ansRaw=parts[4].trim();
-      const ans=parseAnsStr(ansRaw);
-      if(!id||!ans)return;
-      const q=bank.questions.find(q=>q.id===id);if(q){q.answer=ans;updated++;}
+    const examQuestions=bank.questions.filter(q=>q.examId===currentExamId);
+    const byId=new Map(examQuestions.map(q=>[q.id,q]));
+    const bySrcNum=new Map(examQuestions.map(q=>[`${q.sourceName}|${q.num}`,q]));
+    const rawLines=ev.target.result.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+    if(!rawLines.length){alert('CSV is empty.');return;}
+    rawLines.shift(); // header
+    let updated=0,unmatched=0,badAns=0;const issues=[];
+    rawLines.forEach((line,idx)=>{
+      const parts=parseCsvRow(line);if(parts.length<5)return;
+      const id=parts[0].trim(),source=parts[1].trim(),numRaw=parts[2].trim();
+      const ansRaw=parts[parts.length-1].trim();
+      const ans=parseAnsStr(ansRaw);if(!ans){if(ansRaw)badAns++;return;}
+      let q=id?byId.get(id):null;
+      if(!q&&source&&numRaw){const n=parseInt(numRaw);if(n)q=bySrcNum.get(`${source}|${n}`);}
+      if(!q){unmatched++;return;}
+      // Validate: each answer letter should map to an existing option.
+      const optLetters=new Set((q.options||[]).map(o=>o.letter));
+      const missing=ansArr(ans).filter(L=>!optLetters.has(L));
+      if(missing.length)issues.push({num:q.num,source:q.sourceName,ans:ansArr(ans).join(''),missing:missing.join('')});
+      q.answer=ans;
+      const ansLen=ansArr(ans).length;
+      if(ansLen>1)q.multi=ansLen;
+      updated++;
     });
     saveBank();renderEditorList();updateAnsBadge();renderExamDetail();
-    alert(`✓ Imported ${updated} answer${updated!==1?'s':''}.`);
+    if(issues.length){
+      console.warn(`[CSV import] ${issues.length} question(s) have answer letters that don't exist in parsed options — likely PDF parse failures:`);
+      console.table(issues);
+    }
+    const extras=[];
+    if(unmatched)extras.push(`${unmatched} unmatched`);
+    if(badAns)extras.push(`${badAns} bad answer`);
+    if(issues.length)extras.push(`${issues.length} answer/option mismatch — see console`);
+    alert(`✓ Imported ${updated} answer${updated!==1?'s':''}${extras.length?` (${extras.join(', ')})`:''}.`);
   };reader.readAsText(file);e.target.value='';
 });
 
