@@ -740,16 +740,19 @@ function attachExhibits(parsed,pageData){
         if(/^Question\s+#\d+\s+Topic/i.test(pd.lines[i].text))break;
         endIdx=i;
       }
-      // Question exhibit: gaps before the first option letter
+      // Question exhibit: gaps before the first option letter. Skip the very first
+      // gap (header → first body line): in the new card layout that always spans the
+      // header→body card boundary and is just padding, not an exhibit.
       const firstOptIdx=pd.lines.findIndex((l,i)=>i>hi&&optRe.test(l.text));
       const scanEnd=firstOptIdx===-1?endIdx:firstOptIdx-1;
       const qGaps=[];
-      for(let i=hi+1;i<=scanEnd;i++){
+      for(let i=hi+2;i<=scanEnd;i++){
         const gap=pd.lines[i-1].pdfY-pd.lines[i].pdfY;
         if(gap>=70)qGaps.push({topPdfY:pd.lines[i-1].pdfY,bottomPdfY:pd.lines[i].pdfY});
       }
       if(qGaps.length){const img=cropGaps(pd.canvas,pd.viewport,qGaps);if(img)q.exhibitImg=img;}
       // Per-option exhibits: gap between each option letter and the next
+      const nextHdrRe=/^Question\s+#\d+\s+Topic/i;
       if(firstOptIdx!==-1){
         const optLines=pd.lines.slice(firstOptIdx,endIdx+1);
         for(let i=0;i<optLines.length;i++){
@@ -760,9 +763,11 @@ function attachExhibits(parsed,pageData){
           for(let j=i+1;j<optLines.length;j++){if(optRe.test(optLines[j].text)){nextOptI=j;break;}}
           let bottomPdfY;
           if(nextOptI>=optLines.length){
-            // Last option — use the line after endIdx (next question header) as bottom boundary
+            // Last option — bottom boundary is whatever follows the question region.
+            // If that's the next question's header line, the gap is just inter-card
+            // padding (new layout) — never a real exhibit. Skip.
             const afterEnd=pd.lines[endIdx+1];
-            if(!afterEnd)continue;
+            if(!afterEnd||nextHdrRe.test(afterEnd.text))continue;
             bottomPdfY=afterEnd.pdfY;
           }else{
             bottomPdfY=optLines[nextOptI].pdfY;
@@ -778,13 +783,16 @@ function attachExhibits(parsed,pageData){
   }
 }
 
-// True if the source-canvas slice is overwhelmingly white pixels.
-// New ExamTopics layout wraps each question in vector card backgrounds, which
-// the y-gap exhibit detector treats as content. Real exhibits (images, code,
-// tables) have far more than 2% non-white pixels.
+// True if the slice is overwhelmingly white where real exhibit content would live.
+// We sample the central 60% so adjacent card borders/edges at the slice's top and
+// bottom can't disguise an empty card-padding region as content. Real exhibits
+// (images, code, tables) fill that central region with >>2% non-white pixels.
 function isMostlyWhite(canvas,top,h){
   if(h<=0)return true;
-  const data=canvas.getContext('2d').getImageData(0,top,canvas.width,h).data;
+  const inset=Math.floor(h*0.2);
+  const innerH=h-2*inset;
+  if(innerH<=0)return true;
+  const data=canvas.getContext('2d').getImageData(0,top+inset,canvas.width,innerH).data;
   let nonWhite=0;const total=data.length/4;
   for(let i=0;i<data.length;i+=4){
     if(data[i]<240||data[i+1]<240||data[i+2]<240)nonWhite++;
@@ -1114,6 +1122,10 @@ function isStoredImgMostlyWhite(dataUrl){
     img.src=dataUrl;
   });
 }
+// JPEG-size heuristic: blank card-padding slices (sometimes with a faint border
+// stripe) compress to a few KB. Real exhibits (code, tables, screenshots) carry
+// many more bytes — typically 30KB+ raw, well over 40KB as a base64 data URL.
+function isLikelyBlankBySize(dataUrl){return dataUrl.length<20000;}
 document.getElementById('btn-clean-exhibits').addEventListener('click',async()=>{
   const ex=exam();if(!ex)return;
   const qs=bank.questions.filter(q=>q.examId===ex.id);
@@ -1125,7 +1137,8 @@ document.getElementById('btn-clean-exhibits').addEventListener('click',async()=>
     const keys=[q.id,...(q.options||[]).map(o=>q.id+'_'+o.letter)];
     for(const k of keys){
       const img=await getExhibit(k);
-      if(img&&await isStoredImgMostlyWhite(img))toDelete.push(k);
+      if(!img)continue;
+      if(isLikelyBlankBySize(img)||await isStoredImgMostlyWhite(img))toDelete.push(k);
     }
   }
   if(toDelete.length){
