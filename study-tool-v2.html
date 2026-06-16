@@ -302,6 +302,7 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
           <option value="keyed">With answers only</option>
           <option value="nokey">Missing answers only</option>
         </select>
+        <button class="btn orange sm" id="btn-clean-exhibits" title="Remove blank exhibit images left behind by older imports">🧹 Clean blanks</button>
         <button class="btn primary" id="btn-start-study">▶ Start Quiz</button>
       </div>
     </div>
@@ -477,7 +478,7 @@ async function deleteExhibits(qids){
     return new Promise(resolve=>{
       const tx=db.transaction('exhibits','readwrite');
       const store=tx.objectStore('exhibits');
-      for(const qid of qids){store.delete(qid);for(const l of ['A','B','C','D','E'])store.delete(qid+'_'+l);}
+      for(const qid of qids){store.delete(qid);for(const l of 'ABCDEFGHIJ')store.delete(qid+'_'+l);}
       tx.oncomplete=resolve;tx.onerror=resolve;
     });
   }catch{}
@@ -777,6 +778,19 @@ function attachExhibits(parsed,pageData){
   }
 }
 
+// True if the source-canvas slice is overwhelmingly white pixels.
+// New ExamTopics layout wraps each question in vector card backgrounds, which
+// the y-gap exhibit detector treats as content. Real exhibits (images, code,
+// tables) have far more than 2% non-white pixels.
+function isMostlyWhite(canvas,top,h){
+  if(h<=0)return true;
+  const data=canvas.getContext('2d').getImageData(0,top,canvas.width,h).data;
+  let nonWhite=0;const total=data.length/4;
+  for(let i=0;i<data.length;i+=4){
+    if(data[i]<240||data[i+1]<240||data[i+2]<240)nonWhite++;
+  }
+  return nonWhite/total<0.02;
+}
 function cropGaps(canvas,viewport,gaps){
   const s=viewport.scale;
   // topCY is the baseline of the line above the gap; canvas Y increases downward.
@@ -790,7 +804,7 @@ function cropGaps(canvas,viewport,gaps){
     const top=Math.max(0,Math.round(topCY)+descPx);
     const bottom=Math.min(canvas.height,Math.round(botCY)-ascPx);
     return{top,h:bottom-top};
-  }).filter(c=>c.h>20);
+  }).filter(c=>c.h>20&&!isMostlyWhite(canvas,c.top,c.h));
   if(!crops.length)return null;
   const totalH=crops.reduce((s,c)=>s+c.h,0);
   const out=document.createElement('canvas');
@@ -1084,6 +1098,48 @@ document.getElementById('btn-start-study').addEventListener('click',()=>{
   if(f==='nokey')qs=qs.filter(q=>!q.answer);
   if(!qs.length){alert('No questions match the selected filter.');return;}
   launchQuiz(qs);
+});
+
+// Decode a stored exhibit data URL and reuse isMostlyWhite via a temp canvas.
+function isStoredImgMostlyWhite(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth;c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      resolve(isMostlyWhite(c,0,c.height));
+    };
+    img.onerror=()=>resolve(false);
+    img.src=dataUrl;
+  });
+}
+document.getElementById('btn-clean-exhibits').addEventListener('click',async()=>{
+  const ex=exam();if(!ex)return;
+  const qs=bank.questions.filter(q=>q.examId===ex.id);
+  if(!qs.length){alert('No questions in this exam.');return;}
+  const btn=document.getElementById('btn-clean-exhibits');
+  const orig=btn.textContent;btn.disabled=true;btn.textContent='Scanning…';
+  const toDelete=[];
+  for(const q of qs){
+    const keys=[q.id,...(q.options||[]).map(o=>q.id+'_'+o.letter)];
+    for(const k of keys){
+      const img=await getExhibit(k);
+      if(img&&await isStoredImgMostlyWhite(img))toDelete.push(k);
+    }
+  }
+  if(toDelete.length){
+    const db=await openExhibitDb();
+    await new Promise(resolve=>{
+      const tx=db.transaction('exhibits','readwrite');
+      const store=tx.objectStore('exhibits');
+      for(const k of toDelete)store.delete(k);
+      tx.oncomplete=resolve;tx.onerror=resolve;
+    });
+  }
+  btn.textContent=orig;btn.disabled=false;
+  renderExamDetail();
+  alert(`✓ Removed ${toDelete.length} blank exhibit${toDelete.length===1?'':'s'}.`);
 });
 
 function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]];}return r;}
