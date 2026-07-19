@@ -240,6 +240,30 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
 .mi .mya{color:var(--danger);font-family:'DM Mono',monospace;font-size:.74rem;}
 .mi .mca{color:var(--accent2);font-family:'DM Mono',monospace;font-size:.74rem;}
 
+/* ── Stats tab ── */
+.stats-empty{text-align:center;padding:40px 24px;color:var(--muted);font-family:'DM Mono',monospace;font-size:.8rem;}
+.stats-summary{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:22px;}
+.stats-summary .sc{min-width:96px;}
+.stat-section{margin-bottom:24px;}
+.stat-section h4{font-family:'Playfair Display',serif;font-size:1.05rem;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.stat-section h4 .sec-act{margin-left:auto;}
+.thresh-row{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:18px;}
+.thresh-row input{width:56px;padding:5px 8px;border-radius:7px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:'DM Mono',monospace;font-size:.72rem;text-align:center;}
+.session-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 13px;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:.72rem;}
+.session-row .s-date{color:var(--muted);flex:1;}
+.session-row .s-score{font-weight:600;color:var(--text);}
+.session-row .s-detail{color:var(--muted);}
+.pass-badge,.fail-badge{font-size:.6rem;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.05em;}
+.pass-badge{color:var(--accent2);background:rgba(92,232,176,.12);}
+.fail-badge{color:var(--danger);background:rgba(232,92,92,.12);}
+.missed-row{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--danger);border-radius:8px;padding:10px 13px;margin-bottom:6px;}
+.missed-row .m-top{display:flex;align-items:center;gap:10px;margin-bottom:5px;}
+.missed-row .m-num{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--purple);flex-shrink:0;}
+.missed-row .m-count{font-family:'DM Mono',monospace;font-size:.66rem;color:var(--danger);margin-left:auto;flex-shrink:0;}
+.missed-row .m-q{font-size:.82rem;line-height:1.5;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.miss-track{height:4px;background:var(--surface2);border-radius:99px;overflow:hidden;margin-top:7px;}
+.miss-fill{height:100%;background:var(--danger);border-radius:99px;}
+
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
@@ -280,6 +304,7 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
   <div id="exam-tabs">
     <button class="etab active" data-etab="tab-sources">📄 PDFs</button>
     <button class="etab" data-etab="tab-answers">✏️ Answers <span class="badge" id="ans-badge" style="display:none">0</span></button>
+    <button class="etab" data-etab="tab-stats">📊 Stats</button>
   </div>
 
   <!-- PDFs tab -->
@@ -326,6 +351,11 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
       <input type="file" id="csv-input" accept=".csv" style="display:none">
     </div>
     <div class="eq-list" id="eq-list"></div>
+  </div>
+
+  <!-- Stats tab -->
+  <div id="tab-stats" class="etab-panel" style="display:none;">
+    <div id="stats-body"></div>
   </div>
 </div>
 
@@ -402,7 +432,7 @@ let currentExamId=null;
 let selectedSrcs=new Set(); // source ids checked in current exam view
 
 // Quiz state
-let quizQ=[],quizCur=0,quizAns={},quizMissed=[],quizPending={};
+let quizQ=[],quizCur=0,quizAns={},quizMissed=[],quizPending={},quizRecorded=false;
 
 // ── Answer helpers ────────────────────────
 // Normalize answer to array regardless of storage format
@@ -433,7 +463,7 @@ function parseAnsStr(s){
 // ── Persist ──────────────────────────────
 function loadBank(){
   try{const v=localStorage.getItem('studydeck-v2');if(v)bank=JSON.parse(v);}catch(e){console.warn('Storage read failed',e);}
-  bank.exams=bank.exams||[];bank.questions=bank.questions||[];
+  bank.exams=bank.exams||[];bank.questions=bank.questions||[];bank.sessions=bank.sessions||[];
   showExams();
 }
 function saveBank(){
@@ -580,10 +610,13 @@ function renderExamsList(){
     const qs=examQs(ex.id);
     const keyed=qs.filter(hasAns).length;
     const pct=qs.length?Math.round(keyed/qs.length*100):0;
+    const scored=(bank.sessions||[]).filter(s=>s.examId===ex.id&&s.hasKeys);
+    const best=scored.length?Math.max(...scored.map(s=>s.pct)):null;
+    const attemptLine=scored.length?`<br>${scored.length} attempt${scored.length!==1?'s':''} · best ${best}%`:'';
     const card=document.createElement('div');card.className='exam-card';
     card.innerHTML=`
       <div class="exam-card-name">${ex.name}</div>
-      <div class="exam-card-meta">${ex.sources.length} PDF${ex.sources.length!==1?'s':''} · ${qs.length} question${qs.length!==1?'s':''}<br>${keyed}/${qs.length} answers set</div>
+      <div class="exam-card-meta">${ex.sources.length} PDF${ex.sources.length!==1?'s':''} · ${qs.length} question${qs.length!==1?'s':''}<br>${keyed}/${qs.length} answers set${attemptLine}</div>
       <div class="exam-card-bar"><div class="exam-card-bar-fill" style="width:${pct}%"></div></div>
       <div class="exam-card-footer">
         <span class="exam-card-tag">${pct}% keyed</span>
@@ -626,6 +659,7 @@ function deleteExam(id){
   bank.exams=bank.exams.filter(e=>e.id!==id);
   deleteExhibits(bank.questions.filter(q=>q.examId===id).map(q=>q.id));
   bank.questions=bank.questions.filter(q=>q.examId!==id);
+  bank.sessions=(bank.sessions||[]).filter(s=>s.examId!==id);
   saveBank();renderExamsList();
 }
 
@@ -673,6 +707,7 @@ function switchExamTab(id){
   document.querySelectorAll('.etab-panel').forEach(p=>p.style.display='none');
   document.getElementById(id).style.display='block';
   if(id==='tab-answers'){document.getElementById('ed-filter').value='nokey';renderEditorList();}
+  if(id==='tab-stats')renderStats();
 }
 
 // ══════════════════════════════════════════
@@ -1158,7 +1193,7 @@ document.getElementById('btn-clean-exhibits').addEventListener('click',async()=>
 function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]];}return r;}
 
 function launchQuiz(qs){
-  quizQ=shuffle(qs);quizCur=0;quizAns={};quizMissed=[];quizPending={};
+  quizQ=shuffle(qs);quizCur=0;quizAns={};quizMissed=[];quizPending={};quizRecorded=false;
   const _qs=window._otelTracer?.startSpan('quiz.start',{attributes:{'quiz.question_count':qs.length,'exam.id':currentExamId}});_qs?.end();
   showQuiz();renderCard();
 }
@@ -1365,8 +1400,11 @@ function showResults(){
   let correct=0;for(const a of Object.values(quizAns)){if(isCorrectAns(a.sel,a.correct))correct++;}
   const pct=total?Math.round(correct/total*100):0;
   const _rs=window._otelTracer?.startSpan('quiz.complete',{attributes:{'quiz.total':total,'quiz.correct':correct,'quiz.score_pct':pct,'quiz.missed':quizMissed.length,'exam.id':currentExamId}});_rs?.end();
+  recordSession(correct,total,hasKeys);
   document.getElementById('final-score').textContent=hasKeys?pct+'%':'✓';
-  document.getElementById('final-detail').textContent=hasKeys?`${correct} correct out of ${total}`:`${total} questions completed`;
+  const attempts=(bank.sessions||[]).filter(s=>s.examId===currentExamId&&s.hasKeys).length;
+  const attemptNote=hasKeys&&attempts?` · attempt #${attempts}`:'';
+  document.getElementById('final-detail').textContent=(hasKeys?`${correct} correct out of ${total}`:`${total} questions completed`)+attemptNote;
   document.getElementById('results-panel').style.display='block';
   if(quizMissed.length){
     const ml=document.getElementById('missed-list');ml.innerHTML='';
@@ -1379,6 +1417,134 @@ function showResults(){
       ml.appendChild(div);
     });document.getElementById('missed-panel').style.display='block';
   }
+}
+
+// ══════════════════════════════════════════
+//  STATISTICS
+// ══════════════════════════════════════════
+const DEFAULT_PASS=70;
+function examPass(ex){const t=Number(ex&&ex.passThreshold);return Number.isFinite(t)&&t>0?t:DEFAULT_PASS;}
+
+// Persist a completed session + roll up per-question correctness. Guarded so a
+// single completion can't be double-counted.
+function recordSession(correct,total,hasKeys){
+  if(quizRecorded)return;quizRecorded=true;
+  const answeredIdx=Object.keys(quizAns);
+  // Per-question stats — keyed (answerable) questions only.
+  answeredIdx.forEach(i=>{
+    const q=quizQ[i];if(!q||!hasAns(q))return;
+    const lq=bank.questions.find(b=>b.id===q.id);if(!lq)return;
+    const ok=isCorrectAns(quizAns[i].sel,quizAns[i].correct);
+    lq.stats=lq.stats||{seen:0,correct:0,wrong:0};
+    lq.stats.seen++;ok?lq.stats.correct++:lq.stats.wrong++;
+  });
+  const pct=total?Math.round(correct/total*100):0;
+  bank.sessions.push({
+    id:uid(),examId:currentExamId,ts:Date.now(),
+    total,answered:answeredIdx.length,correct,pct,hasKeys,
+    srcIds:[...new Set(quizQ.map(q=>q.sourceId))],
+    missedQids:quizMissed.map(q=>q.id)
+  });
+  saveBank();
+}
+
+function fmtWhen(ts){return new Date(ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+
+function renderStats(){
+  const ex=exam();const body=document.getElementById('stats-body');if(!ex||!body)return;
+  body.innerHTML='';
+  const sessions=(bank.sessions||[]).filter(s=>s.examId===ex.id).sort((a,b)=>b.ts-a.ts);
+  const scored=sessions.filter(s=>s.hasKeys);
+  const thresh=examPass(ex);
+  if(!sessions.length){
+    body.innerHTML='<div class="stats-empty">No quiz attempts yet.<br>Finish a study session to start tracking your progress.</div>';
+    return;
+  }
+  const pcts=scored.map(s=>s.pct);
+  const best=pcts.length?Math.max(...pcts):null;
+  const avg=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):null;
+  const last=scored.length?scored[0].pct:null;
+  const passed=scored.filter(s=>s.pct>=thresh).length;
+  const passRate=scored.length?Math.round(passed/scored.length*100):null;
+  const na='<span style="color:var(--muted)">—</span>';
+
+  // ── Summary cards ──
+  const sum=document.createElement('div');sum.className='stats-summary';
+  const card=(val,label,cls)=>`<div class="sc"><div class="sv"${cls?` style="color:${cls}"`:''}>${val}</div><div class="sl">${label}</div></div>`;
+  sum.innerHTML=
+    card(sessions.length,'Attempts','var(--accent)')+
+    card(best!=null?best+'%':na,'Best','var(--accent2)')+
+    card(avg!=null?avg+'%':na,'Average')+
+    card(last!=null?last+'%':na,'Last')+
+    card(passRate!=null?passRate+'%':na,'Pass Rate',passRate!=null&&passRate>=50?'var(--accent2)':'var(--danger)');
+  body.appendChild(sum);
+
+  // ── Pass threshold ──
+  const tr=document.createElement('div');tr.className='thresh-row';
+  tr.innerHTML=`<span>Pass mark</span><input type="number" id="pass-input" min="1" max="100" value="${thresh}"><span>% — sessions at or above this count as a pass</span>`;
+  body.appendChild(tr);
+  tr.querySelector('#pass-input').addEventListener('change',e=>{
+    let v=parseInt(e.target.value,10);if(!Number.isFinite(v))v=DEFAULT_PASS;v=Math.min(100,Math.max(1,v));
+    ex.passThreshold=v;saveBank();renderStats();
+  });
+
+  // ── Most missed ──
+  const missed=bank.questions
+    .filter(q=>q.examId===ex.id&&q.stats&&q.stats.wrong>0)
+    .sort((a,b)=>b.stats.wrong-a.stats.wrong||(b.stats.wrong/b.stats.seen)-(a.stats.wrong/a.stats.seen));
+  const missSec=document.createElement('div');missSec.className='stat-section';
+  const missHead=document.createElement('h4');missHead.innerHTML=`❌ Most Missed Questions`;
+  if(missed.length){
+    const drill=document.createElement('button');drill.className='btn orange sm sec-act';drill.textContent='▶ Drill these';
+    drill.addEventListener('click',()=>launchQuiz(missed));
+    missHead.appendChild(drill);
+  }
+  missSec.appendChild(missHead);
+  if(!missed.length){
+    const p=document.createElement('div');p.className='stats-empty';p.style.padding='16px';
+    p.textContent=scored.length?'No missed questions yet — nice work.':'Answer some keyed questions to see your weak spots.';
+    missSec.appendChild(p);
+  }else{
+    const maxWrong=missed[0].stats.wrong;
+    missed.slice(0,12).forEach(q=>{
+      const row=document.createElement('div');row.className='missed-row';
+      const rate=Math.round(q.stats.wrong/q.stats.seen*100);
+      row.innerHTML=
+        `<div class="m-top"><span class="m-num">#${q.num} · ${(q.sourceName||'').replace(/\.pdf$/i,'')}</span>`+
+        `<span class="m-count">${q.stats.wrong}/${q.stats.seen} missed (${rate}%)</span></div>`+
+        `<div class="m-q"></div>`+
+        `<div class="miss-track"><div class="miss-fill" style="width:${Math.round(q.stats.wrong/maxWrong*100)}%"></div></div>`;
+      row.querySelector('.m-q').textContent=q.question;
+      missSec.appendChild(row);
+    });
+  }
+  body.appendChild(missSec);
+
+  // ── Session history ──
+  const histSec=document.createElement('div');histSec.className='stat-section';
+  histSec.innerHTML='<h4>🕑 Recent Attempts</h4>';
+  sessions.slice(0,15).forEach(s=>{
+    const row=document.createElement('div');row.className='session-row';
+    const badge=s.hasKeys?(s.pct>=thresh?'<span class="pass-badge">Pass</span>':'<span class="fail-badge">Fail</span>'):'';
+    const scoreTxt=s.hasKeys?`${s.pct}%`:'✓';
+    row.innerHTML=
+      `<span class="s-date">${fmtWhen(s.ts)}</span>`+
+      `<span class="s-score">${scoreTxt}</span>`+
+      `<span class="s-detail">${s.hasKeys?`${s.correct}/${s.total}`:`${s.total} q`}</span>`+
+      badge;
+    histSec.appendChild(row);
+  });
+  body.appendChild(histSec);
+
+  // ── Reset ──
+  const reset=document.createElement('button');reset.className='btn danger sm';reset.textContent='↺ Reset stats for this exam';
+  reset.addEventListener('click',()=>{
+    if(!confirm(`Clear all quiz history and per-question stats for "${ex.name}"? This cannot be undone.`))return;
+    bank.sessions=bank.sessions.filter(s=>s.examId!==ex.id);
+    bank.questions.forEach(q=>{if(q.examId===ex.id)delete q.stats;});
+    saveBank();renderStats();
+  });
+  body.appendChild(reset);
 }
 </script>
 </body>
