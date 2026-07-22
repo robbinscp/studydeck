@@ -346,9 +346,18 @@ header p{color:var(--muted);font-family:'DM Mono',monospace;font-size:.7rem;marg
         <option value="nokey">Missing answers</option>
         <option value="keyed">Has answer</option>
       </select>
+      <button class="btn orange sm" id="btn-bulk-key">⌨ Bulk key</button>
       <button class="btn orange sm" id="btn-export">↑ Export CSV</button>
       <button class="btn orange sm" id="btn-import-trigger">↓ Import CSV</button>
       <input type="file" id="csv-input" accept=".csv" style="display:none">
+    </div>
+    <div id="bulk-key-panel" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.03);">
+      <div style="font-size:.8rem;opacity:.75;margin-bottom:6px;line-height:1.4;">Paste one answer per line as <code>number: letters</code> — e.g. <code>14: BD</code>. Multi-answer questions take multiple letters. Matched by question number within this exam.</div>
+      <textarea id="bulk-key-input" rows="8" placeholder="1: B&#10;2: A&#10;14: BD&#10;42: AC" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:.85rem;padding:8px;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn orange sm" id="btn-bulk-apply">Apply keys</button>
+        <button class="btn sm" id="btn-bulk-cancel">Cancel</button>
+      </div>
     </div>
     <div class="eq-list" id="eq-list"></div>
   </div>
@@ -1139,6 +1148,61 @@ document.getElementById('csv-input').addEventListener('change',e=>{
     if(issues.length)extras.push(`${issues.length} answer/option mismatch — see console`);
     alert(`✓ Imported ${updated} answer${updated!==1?'s':''}${extras.length?` (${extras.join(', ')})`:''}.`);
   };reader.readAsText(file);e.target.value='';
+});
+
+// ── Bulk answer-key paste ────────────────
+// Lets the user key a whole exam from a plain-text list instead of clicking each
+// question — useful for banks whose PDFs ship no answer keys (must be sourced by hand).
+const bulkPanel=document.getElementById('bulk-key-panel');
+document.getElementById('btn-bulk-key').addEventListener('click',()=>{
+  const showing=bulkPanel.style.display!=='none';
+  bulkPanel.style.display=showing?'none':'block';
+  if(!showing)document.getElementById('bulk-key-input').focus();
+});
+document.getElementById('btn-bulk-cancel').addEventListener('click',()=>{bulkPanel.style.display='none';});
+// Parse "num: letters" lines (also tolerates "Q1", "#1", "1) B", "1 - B", "1 B").
+// The answer portion must be letters/commas/spaces only, so stray prose like
+// "B most voted" is rejected outright rather than smuggling in bogus letters (D/E…).
+function parseBulkKeys(text){
+  const entries=[],bad=[];
+  text.replace(/\r/g,'').split('\n').forEach(line=>{
+    if(!line.trim())return;
+    const m=line.match(/^\s*(?:q(?:uestion)?\s*)?#?\s*(\d+)\s*[).:\-]?\s*([A-J][A-J ,]*)\s*$/i);
+    const ans=m?parseAnsStr(m[2]):null;
+    if(!ans){bad.push(line.trim());return;}
+    entries.push({num:parseInt(m[1]),ans});
+  });
+  return{entries,bad};
+}
+document.getElementById('btn-bulk-apply').addEventListener('click',()=>{
+  const {entries,bad}=parseBulkKeys(document.getElementById('bulk-key-input').value);
+  if(!entries.length){alert(bad.length?`No valid entries — ${bad.length} line(s) couldn't be parsed. Use "number: letters" (e.g. 14: BD).`:'Nothing to apply.');return;}
+  const examQuestions=bank.questions.filter(q=>q.examId===currentExamId);
+  const byNum=new Map();
+  for(const q of examQuestions){if(!byNum.has(q.num))byNum.set(q.num,[]);byNum.get(q.num).push(q);}
+  let updated=0,unmatched=0,ambiguous=0;const issues=[];
+  for(const {num,ans} of entries){
+    const matches=byNum.get(num);
+    if(!matches){unmatched++;continue;}
+    if(matches.length>1){ambiguous++;continue;} // same # in multiple PDFs — can't disambiguate from a bare number
+    const q=matches[0];
+    const optLetters=new Set((q.options||[]).map(o=>o.letter));
+    const missing=ansArr(ans).filter(L=>!optLetters.has(L));
+    if(missing.length)issues.push({num:q.num,source:q.sourceName,ans:ansArr(ans).join(''),missing:missing.join('')});
+    q.answer=ans;
+    const ansLen=ansArr(ans).length;
+    if(ansLen>1)q.multi=ansLen;
+    updated++;
+  }
+  saveBank();renderEditorList();updateAnsBadge();renderExamDetail();
+  if(issues.length){console.warn(`[Bulk key] ${issues.length} question(s) have answer letters that don't exist in parsed options — likely PDF parse failures:`);console.table(issues);}
+  const extras=[];
+  if(unmatched)extras.push(`${unmatched} unmatched #`);
+  if(ambiguous)extras.push(`${ambiguous} ambiguous # (same number in multiple PDFs — use CSV import)`);
+  if(bad.length)extras.push(`${bad.length} unparseable line${bad.length>1?'s':''}`);
+  if(issues.length)extras.push(`${issues.length} answer/option mismatch — see console`);
+  alert(`✓ Keyed ${updated} question${updated!==1?'s':''}${extras.length?` (${extras.join(', ')})`:''}.`);
+  if(updated)document.getElementById('bulk-key-input').value='';
 });
 
 // ══════════════════════════════════════════
