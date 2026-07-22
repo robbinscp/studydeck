@@ -533,7 +533,17 @@ migrateExhibitsToIdb();
 
 // ── Helpers ───────────────────────────────
 function uid(){return Math.random().toString(36).slice(2,10);}
-function fp(t){return t.toLowerCase().replace(/\s+/g,'').slice(0,80);}
+// Fingerprint a question for dedup. Uses the full question text PLUS the option
+// letters+text — NOT a truncated stem. Many exam banks (e.g. VCF) reuse a long
+// boilerplate scenario prefix across otherwise-distinct questions, and some reuse
+// the entire scenario stem with a different sub-question/options (e.g. VCF Q14 vs
+// Q42). A prefix- or stem-only fingerprint collapses those into one and silently
+// drops questions on import. Genuine cross-file dupes have identical text AND
+// options, so they still fold together here.
+function fp(q){
+  const t=typeof q==='string'?q:(q.question+'||'+(q.options||[]).map(o=>o.letter+':'+o.text).join('|'));
+  return t.toLowerCase().replace(/\s+/g,'');
+}
 function showStatus(m,c,spin){const el=document.getElementById('status');el.style.display='block';el.style.borderLeftColor=c||'var(--accent)';el.innerHTML=spin?`<span class="spinner"></span>${m}`:m;}
 function hideStatus(){document.getElementById('status').style.display='none';}
 function exam(){return bank.exams.find(e=>e.id===currentExamId)||null;}
@@ -895,10 +905,10 @@ async function mergeIntoBankExam(ex,filename,parsed){
   let src=ex.sources.find(s=>s.name===filename);
   if(!src){src={id:uid(),name:filename,added:new Date().toLocaleDateString(),count:0};ex.sources.push(src);}
   const existingQs=bank.questions.filter(q=>q.examId===ex.id);
-  const fpMap=new Map(existingQs.map(q=>[fp(q.question),q]));
+  const fpMap=new Map(existingQs.map(q=>[fp(q),q]));
   let added=0,dupes=0,exhibitsPatched=0;
   for(const q of parsed){
-    const f=fp(q.question);
+    const f=fp(q);
     const existing=fpMap.get(f);
     if(existing){
       if(q.multi>1&&!existing.multi)existing.multi=q.multi;
