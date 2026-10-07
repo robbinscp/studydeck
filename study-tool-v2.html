@@ -785,13 +785,13 @@ function extractLinesAndPos(content,viewport){
 function attachExhibits(parsed,pageData){
   const optRe=/^([A-J])\.\s*/;
   for(const q of parsed){
-    const headerRe=new RegExp(`Question\\s+#${q.num}\\s+Topic`,'i');
+    const headerRe=new RegExp(`Question\\s+#${q.num}\\s+\\(?Topic`,'i');
     for(const pd of pageData){
       const hi=pd.lines.findIndex(l=>headerRe.test(l.text));
       if(hi===-1)continue;
       let endIdx=hi+1;
       for(let i=hi+1;i<pd.lines.length;i++){
-        if(/^Question\s+#\d+\s+Topic/i.test(pd.lines[i].text))break;
+        if(/^Question\s+#\d+\s+\(?Topic/i.test(pd.lines[i].text))break;
         endIdx=i;
       }
       // Question exhibit: gaps before the first option letter. Skip the very first
@@ -806,7 +806,7 @@ function attachExhibits(parsed,pageData){
       }
       if(qGaps.length){const img=cropGaps(pd.canvas,pd.viewport,qGaps);if(img)q.exhibitImg=img;}
       // Per-option exhibits: gap between each option letter and the next
-      const nextHdrRe=/^Question\s+#\d+\s+Topic/i;
+      const nextHdrRe=/^Question\s+#\d+\s+\(?Topic/i;
       if(firstOptIdx!==-1){
         const optLines=pd.lines.slice(firstOptIdx,endIdx+1);
         for(let i=0;i<optLines.length;i++){
@@ -878,7 +878,7 @@ function cropGaps(canvas,viewport,gaps){
 }
 function parseExamTopics(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-  const result=[];const reHdr=/^Question\s+#(\d+)\s+Topic/i;const reOpt=/^([A-J])\.\s*(.*)/;
+  const result=[];const reHdr=/^Question\s+#(\d+)\s+\(?Topic/i;const reOpt=/^([A-J])\.\s*(.*)/;
   // Support multi-letter answers: "BD", "B, D", "B D", "B and D"
   const reAns=/^(?:Correct\s+)?Answer[:\s]+([A-J][A-J ,and]*)/i;
   const reSkip=/^(Topic \d+|Next Questions|Viewing (page|questions)|Browse atleast)/i;
